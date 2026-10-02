@@ -5,34 +5,37 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Reporte de Incidencias - Sánchez Taboada</title>
   
-  <!-- Bootstrap 5 & Icons -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-  
-  <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
   <style>
     body { background-color: #f8f9fa; font-family: system-ui, -apple-system, sans-serif; padding-bottom: 3rem; }
-    .header-banner { background: linear-gradient(135deg, #1e3c72, #2a5298); color: white; border-radius: 0 0 16px 16px; }
+    .header-banner { background: linear-gradient(135deg, #1e3c72, #2a5298); color: white; border-radius: 0 0 16px 16px; position: relative; }
     .card-incidencia { border: none; border-radius: 12px; }
     .preview-container { position: relative; display: inline-block; }
     .preview-container img { max-height: 150px; border-radius: 8px; object-fit: cover; }
     .btn-remove-preview { position: absolute; top: -5px; right: -5px; border-radius: 50%; padding: 2px 6px; font-size: 0.75rem; }
-    .badge-estado { font-size: 0.78rem; padding: 6px 12px; border-radius: 20px; cursor: pointer; }
+    .badge-estado { font-size: 0.78rem; padding: 6px 12px; border-radius: 20px; }
     #mapa-formulario { height: 280px; border-radius: 10px; width: 100%; z-index: 1; }
   </style>
 </head>
 <body>
 
   <header class="header-banner p-4 shadow-sm mb-3 text-center">
+    <div class="position-absolute top-0 end-0 p-3">
+      <button id="btn-auth-header" class="btn btn-sm btn-outline-light rounded-pill" data-bs-toggle="modal" data-bs-target="#modalLogin">
+        <i class="bi bi-person-lock"></i> Acceso Admin
+      </button>
+    </div>
+
     <div class="container" style="max-width: 720px;">
       <h3 class="fw-bold mb-1"><i class="bi bi-geo-alt-fill text-warning"></i> Incidencias Sánchez Taboada</h3>
       <p class="small text-white-50 mb-0">Plataforma ciudadana para el reporte y seguimiento de problemas comunitarios</p>
     </div>
   </header>
 
-  <!-- Contadores resumidos entre Header y Formulario -->
+  <!-- Contadores resumidos -->
   <div class="container mb-4" style="max-width: 720px;">
     <div class="row g-2 text-center">
       <div class="col-4">
@@ -50,7 +53,7 @@
       <div class="col-4">
         <div class="card border-0 shadow-sm bg-success bg-opacity-10 py-2">
           <span class="text-success fw-bold fs-4 mb-0" id="cant-atendidos">0</span>
-          <span class="small text-muted fw-semibold">Atendidos / Cerrados</span>
+          <span class="small text-muted fw-semibold">Atendidos</span>
         </div>
       </div>
     </div>
@@ -88,7 +91,7 @@
             </div>
           </div>
 
-          <!-- Mapa con Botón GPS -->
+          <!-- Mapa con GPS -->
           <div class="mb-3">
             <div class="d-flex justify-content-between align-items-center mb-1">
               <label class="form-label small fw-semibold mb-0"><i class="bi bi-pin-map-fill text-danger"></i> Ubicación exacta en el mapa:</label>
@@ -97,7 +100,6 @@
               </button>
             </div>
             <div id="mapa-formulario" class="border"></div>
-            <small class="text-muted" style="font-size: 0.75rem;">Haz clic en el mapa o usa el botón GPS para seleccionar el lugar exacto.</small>
           </div>
 
           <div class="mb-3">
@@ -127,7 +129,7 @@
       </div>
     </div>
 
-    <!-- Lista de Reportes y Paginación -->
+    <!-- Lista de Reportes -->
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h5 class="fw-bold mb-0">Reportes Recientes</h5>
       <button class="btn btn-sm btn-outline-primary" onclick="cargarIncidencias()"><i class="bi bi-arrow-clockwise"></i> Actualizar</button>
@@ -146,7 +148,31 @@
 
   </div>
 
-  <!-- Scripts -->
+  <!-- Modal de Inicio de Sesión para Administradores -->
+  <div class="modal fade" id="modalLogin" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+      <div class="modal-content border-0 shadow">
+        <div class="modal-header border-bottom-0 pb-0">
+          <h6 class="modal-title fw-bold"><i class="bi bi-shield-lock-fill text-primary"></i> Iniciar Sesión Autorizada</h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form onsubmit="event.preventDefault(); iniciarSesion();">
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">Correo Electrónico</label>
+              <input type="email" id="login-email" class="form-control form-control-sm" required placeholder="admin@ejemplo.com">
+            </div>
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">Contraseña</label>
+              <input type="password" id="login-password" class="form-control form-control-sm" required placeholder="••••••••">
+            </div>
+            <button type="submit" id="btn-login-submit" class="btn btn-primary btn-sm w-100 rounded-pill fw-bold">Ingresar</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

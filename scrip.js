@@ -2,21 +2,82 @@ const SUPABASE_URL = 'https://kbxsszmpritrafmqyqbr.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_b-iHd631PbjPe11mR_uU4g_ETn-0yzs';
 const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// Variables para el mapa
 let mapa;
 let marcador;
 let latSeleccionada = 32.4825;
 let lngSeleccionada = -116.9855;
 
-// Variables de Paginación y Datos
 let listaIncidencias = [];
 let paginaActual = 1;
 const reportesPorPagina = 10;
+let usuarioAutenticado = null;
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   inicializarMapa();
+  await verificarSesion();
   cargarIncidencias();
 });
+
+// Verificar si hay usuario con sesión activa
+async function verificarSesion() {
+  const { data: { session } } = await _supabase.auth.getSession();
+  usuarioAutenticado = session ? session.user : null;
+  actualizarBotonHeader();
+}
+
+function actualizarBotonHeader() {
+  const btnAuth = document.getElementById('btn-auth-header');
+  if (!btnAuth) return;
+
+  if (usuarioAutenticado) {
+    btnAuth.innerHTML = `<i class="bi bi-box-arrow-right"></i> Cerrar Sesión (${usuarioAutenticado.email.split('@')[0]})`;
+    btnAuth.removeAttribute('data-bs-toggle');
+    btnAuth.removeAttribute('data-bs-target');
+    btnAuth.onclick = cerrarSesion;
+  } else {
+    btnAuth.innerHTML = `<i class="bi bi-person-lock"></i> Acceso Admin`;
+    btnAuth.setAttribute('data-bs-toggle', 'modal');
+    btnAuth.setAttribute('data-bs-target', '#modalLogin');
+    btnAuth.onclick = null;
+  }
+}
+
+async function iniciarSesion() {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value.trim();
+  const btn = document.getElementById('btn-login-submit');
+
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Verificando...`;
+
+  const { data, error } = await _supabase.auth.signInWithPassword({ email, password });
+
+  btn.disabled = false;
+  btn.innerText = 'Ingresar';
+
+  if (error) {
+    alert('Error al iniciar sesión: ' + error.message);
+  } else {
+    usuarioAutenticado = data.user;
+    
+    // Cerrar modal
+    const modalEl = document.getElementById('modalLogin');
+    const modal = bootstrap.Modal.getInstance(modalEl);
+    if (modal) modal.hide();
+
+    actualizarBotonHeader();
+    renderizarPagina(); // Volver a renderizar para activar la edición de estados
+    alert('¡Bienvenido! Ahora tienes permisos de administrador.');
+  }
+}
+
+async function cerrarSesion() {
+  await _supabase.auth.signOut();
+  usuarioAutenticado = null;
+  actualizarBotonHeader();
+  renderizarPagina(); // Desactivar la edición de estados
+  alert('Sesión cerrada correctamente.');
+}
 
 function inicializarMapa() {
   const container = document.getElementById('mapa-formulario');
@@ -50,7 +111,7 @@ async function actualizarPosicion(lat, lng) {
 
 function obtenerUbicacionGPS() {
   if (!navigator.geolocation) {
-    alert('Tu dispositivo o navegador no soporta geolocalización GPS.');
+    alert('Tu dispositivo no soporta geolocalización GPS.');
     return;
   }
 
@@ -73,7 +134,7 @@ function obtenerUbicacionGPS() {
     },
     (error) => {
       if (btnGps) btnGps.innerHTML = '<i class="bi bi-crosshair"></i> Usar mi ubicación actual (GPS)';
-      alert('Error de GPS: Asegúrate de aceptar los permisos de ubicación.');
+      alert('Error de GPS: Permite el acceso a la ubicación en tu navegador.');
     },
     { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
   );
@@ -98,7 +159,7 @@ async function autocompletarNombreCalle(lat, lng) {
       }
     }
   } catch (err) {
-    console.log('Error al obtener nombre de calle:', err);
+    console.log('Error al obtener calle:', err);
   }
 }
 
@@ -120,7 +181,6 @@ function cancelarFoto() {
   document.getElementById('image-preview').src = '';
 }
 
-// Cargar todas las incidencias y actualizar contadores
 async function cargarIncidencias() {
   const container = document.getElementById('incidencias-container');
   if (!container) return;
@@ -136,13 +196,12 @@ async function cargarIncidencias() {
   }
 
   listaIncidencias = incidencias || [];
-  paginaActual = 1; // Reiniciar a la primera página
+  paginaActual = 1;
 
   actualizarContadores();
   renderizarPagina();
 }
 
-// Calcular y mostrar la cantidad de reportes según su estado
 function actualizarContadores() {
   let pendientes = 0;
   let revision = 0;
@@ -160,7 +219,6 @@ function actualizarContadores() {
   document.getElementById('cant-atendidos').innerText = atendidos;
 }
 
-// Renderizar la lista con paginación
 function renderizarPagina() {
   const container = document.getElementById('incidencias-container');
   if (!container) return;
@@ -190,6 +248,25 @@ function renderizarPagina() {
       ? `https://www.google.com/maps?q=${item.lat},${item.lng}` 
       : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.ubicacion + ' Sanchez Taboada Tijuana')}`;
 
+    // Control del botón de estado según autenticación
+    let htmlEstado = `<span class="badge ${badgeClass} badge-estado shadow-sm">${item.estado || 'Pendiente'}</span>`;
+
+    if (usuarioAutenticado) {
+      htmlEstado = `
+        <div class="dropdown">
+          <button class="btn btn-sm ${badgeClass} dropdown-toggle badge-estado shadow-sm" type="button" data-bs-toggle="dropdown">
+            ${item.estado || 'Pendiente'}
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+            <li><h6 class="dropdown-header">Cambiar Estado</h6></li>
+            <li><a class="dropdown-item small" href="javascript:void(0)" onclick="cambiarEstado('${item.id}', 'Pendiente')">⏳ Pendiente</a></li>
+            <li><a class="dropdown-item small" href="javascript:void(0)" onclick="cambiarEstado('${item.id}', 'En revisión')">🔍 En revisión</a></li>
+            <li><a class="dropdown-item small" href="javascript:void(0)" onclick="cambiarEstado('${item.id}', 'Atendido')">✅ Atendido / Cerrado</a></li>
+          </ul>
+        </div>
+      `;
+    }
+
     return `
       <div class="card card-incidencia shadow-sm mb-3">
         <div class="card-body">
@@ -198,19 +275,7 @@ function renderizarPagina() {
               <span class="badge bg-secondary mb-1">${item.tipo}</span>
               <h5 class="fw-bold mb-1">${item.titulo}</h5>
             </div>
-            
-            <!-- Desplegable para cambiar el Estado -->
-            <div class="dropdown">
-              <button class="btn btn-sm ${badgeClass} dropdown-toggle badge-estado shadow-sm" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                ${item.estado || 'Pendiente'}
-              </button>
-              <ul class="dropdown-menu dropdown-menu-end shadow-sm">
-                <li><h6 class="dropdown-header">Cambiar Estado</h6></li>
-                <li><a class="dropdown-item small" href="javascript:void(0)" onclick="cambiarEstado('${item.id}', 'Pendiente')">⏳ Pendiente</a></li>
-                <li><a class="dropdown-item small" href="javascript:void(0)" onclick="cambiarEstado('${item.id}', 'En revisión')">🔍 En revisión</a></li>
-                <li><a class="dropdown-item small" href="javascript:void(0)" onclick="cambiarEstado('${item.id}', 'Atendido')">✅ Atendido / Cerrado</a></li>
-              </ul>
-            </div>
+            ${htmlEstado}
           </div>
 
           <p class="small text-muted mb-2">
@@ -236,20 +301,22 @@ function renderizarPagina() {
     `;
   }).join('');
 
-  // Actualizar controles del paginador
   document.getElementById('info-pagina').innerText = `Página ${paginaActual} de ${totalPaginas}`;
   document.getElementById('btn-prev').disabled = (paginaActual === 1);
   document.getElementById('btn-next').disabled = (paginaActual === totalPaginas);
 }
 
-// Navegar entre páginas
 function cambiarPagina(direccion) {
   paginaActual += direccion;
   renderizarPagina();
 }
 
-// Cambiar el estado de un reporte en Supabase
 async function cambiarEstado(id, nuevoEstado) {
+  if (!usuarioAutenticado) {
+    alert('Debes iniciar sesión para realizar esta acción.');
+    return;
+  }
+
   const { error } = await _supabase
     .from('incidencias')
     .update({ estado: nuevoEstado })
@@ -258,7 +325,6 @@ async function cambiarEstado(id, nuevoEstado) {
   if (error) {
     alert('Error al cambiar el estado: ' + error.message);
   } else {
-    // Actualizar estado localmente sin recargar toda la página
     const item = listaIncidencias.find(i => i.id == id);
     if (item) item.estado = nuevoEstado;
     
@@ -267,7 +333,6 @@ async function cambiarEstado(id, nuevoEstado) {
   }
 }
 
-// Guardar nueva incidencia
 async function crearIncidencia() {
   const titulo = document.getElementById('inc-titulo').value.trim();
   const tipo = document.getElementById('inc-tipo').value;
