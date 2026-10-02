@@ -1,6 +1,6 @@
 // Configuración de Supabase (Reemplaza con tus credenciales de Supabase)
-const SUPABASE_URL = 'https://zlxaiahojqkqdprtmfwt.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_dgF4imCaL52CFmdOZ17kKQ_0lhrCSq7';
+const SUPABASE_URL = 'https://kbxsszmpritrafmqyqbr.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_b-iHd631PbjPe11mR_uU4g_ETn-0yzs';
 const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // Inicializar al cargar la página
