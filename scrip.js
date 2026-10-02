@@ -2,7 +2,6 @@ const SUPABASE_URL = 'https://kbxsszmpritrafmqyqbr.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_b-iHd631PbjPe11mR_uU4g_ETn-0yzs';
 const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// Variables para el mapa
 let mapa;
 let marcador;
 // Coordenadas por defecto: Sánchez Taboada, Tijuana
@@ -14,8 +13,10 @@ document.addEventListener('DOMContentLoaded', () => {
   cargarIncidencias();
 });
 
-// Inicializar Mapa
 function inicializarMapa() {
+  const container = document.getElementById('mapa-formulario');
+  if (!container) return;
+
   mapa = L.map('mapa-formulario').setView([latSeleccionada, lngSeleccionada], 15);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -25,58 +26,55 @@ function inicializarMapa() {
 
   marcador = L.marker([latSeleccionada, lngSeleccionada], { draggable: true }).addTo(mapa);
 
-  // Al hacer clic en el mapa, actualizar ubicación y autocompletar calle
   mapa.on('click', (e) => {
     actualizarPosicion(e.latlng.lat, e.latlng.lng);
   });
 
-  // Al arrastrar el marcador
   marcador.on('dragend', (e) => {
     const pos = marcador.getLatLng();
     actualizarPosicion(pos.lat, pos.lng);
   });
 }
 
-// Función para actualizar coordenadas y autocompletar la calle
 async function actualizarPosicion(lat, lng) {
   latSeleccionada = lat;
   lngSeleccionada = lng;
   marcador.setLatLng([lat, lng]);
-  
-  // Consultar el nombre de la calle de forma automática
   await autocompletarNombreCalle(lat, lng);
 }
 
-// Obtener ubicación GPS del dispositivo
+// Función GPS mejorada
 function obtenerUbicacionGPS() {
   if (!navigator.geolocation) {
-    alert('Tu navegador o dispositivo no soporta la geolocalización por GPS.');
+    alert('Tu dispositivo o navegador no soporta geolocalización GPS.');
     return;
   }
 
   const btnGps = document.getElementById('btn-gps');
-  if (btnGps) btnGps.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Detectando GPS...';
+  if (btnGps) btnGps.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Obteniendo señal GPS...';
 
   navigator.geolocation.getCurrentPosition(
     async (position) => {
       const lat = position.coords.latitude;
       const lng = position.coords.longitude;
 
-      // Enfocar mapa y mover marcador a la posición GPS con zoom cercano (17)
-      mapa.setView([lat, lng], 17);
+      if (mapa) {
+        mapa.invalidateSize(); // Refresca el lienzo del mapa por si acaso
+        mapa.setView([lat, lng], 17);
+      }
+      
       await actualizarPosicion(lat, lng);
 
       if (btnGps) btnGps.innerHTML = '<i class="bi bi-crosshair"></i> Usar mi ubicación actual (GPS)';
     },
     (error) => {
       if (btnGps) btnGps.innerHTML = '<i class="bi bi-crosshair"></i> Usar mi ubicación actual (GPS)';
-      alert('No se pudo obtener la ubicación GPS. Por favor activa los permisos de ubicación en tu celular o navegador.');
+      alert('Error de GPS: Asegúrate de aceptar el permiso de ubicación que solicita el navegador.');
     },
-    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
   );
 }
 
-// Autocompletar la caja de texto de la calle mediante Reverse Geocoding
 async function autocompletarNombreCalle(lat, lng) {
   try {
     const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`);
@@ -86,17 +84,17 @@ async function autocompletarNombreCalle(lat, lng) {
       const calle = data.address.road || data.address.pedestrian || data.address.suburb || '';
       const colonia = data.address.neighbourhood || data.address.suburb || '';
       
-      let direccionFormateada = calle;
+      let direccion = calle;
       if (colonia && !calle.includes(colonia)) {
-        direccionFormateada += (direccionFormateada ? ', ' : '') + colonia;
+        direccion += (direccion ? ', ' : '') + colonia;
       }
 
-      if (direccionFormateada) {
-        document.getElementById('inc-ubicacion').value = direccionFormateada;
+      if (direccion) {
+        document.getElementById('inc-ubicacion').value = direccion;
       }
     }
   } catch (err) {
-    console.log('No se pudo autocompletar el nombre de la calle:', err);
+    console.log('Error al obtener nombre de calle:', err);
   }
 }
 
@@ -118,7 +116,6 @@ function cancelarFoto() {
   document.getElementById('image-preview').src = '';
 }
 
-// Cargar listado de incidencias
 async function cargarIncidencias() {
   const container = document.getElementById('incidencias-container');
   if (!container) return;
@@ -182,7 +179,6 @@ async function cargarIncidencias() {
   }).join('');
 }
 
-// Guardar incidencia
 async function crearIncidencia() {
   const titulo = document.getElementById('inc-titulo').value.trim();
   const tipo = document.getElementById('inc-tipo').value;

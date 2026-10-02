@@ -9,19 +9,18 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
   
-  <!-- Leaflet CSS (Mapa) -->
+  <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
   <style>
     body { background-color: #f8f9fa; font-family: system-ui, -apple-system, sans-serif; padding-bottom: 3rem; }
     .header-banner { background: linear-gradient(135deg, #1e3c72, #2a5298); color: white; border-radius: 0 0 16px 16px; }
-    .card-incidencia { border: none; border-radius: 12px; transition: transform 0.2s; }
-    .card-incidencia:hover { transform: translateY(-2px); }
+    .card-incidencia { border: none; border-radius: 12px; }
     .preview-container { position: relative; display: inline-block; }
     .preview-container img { max-height: 150px; border-radius: 8px; object-fit: cover; }
     .btn-remove-preview { position: absolute; top: -5px; right: -5px; border-radius: 50%; padding: 2px 6px; font-size: 0.75rem; }
     .badge-estado { font-size: 0.75rem; padding: 6px 10px; border-radius: 20px; }
-    #mapa-formulario { height: 260px; border-radius: 10px; z-index: 1; }
+    #mapa-formulario { height: 280px; border-radius: 10px; width: 100%; z-index: 1; }
   </style>
 </head>
 <body>
@@ -35,22 +34,7 @@
 
   <div class="container" style="max-width: 720px;">
 
-    <!-- Selección en el Mapa con botón de GPS -->
-<div class="mb-3">
-  <div class="d-flex justify-content-between align-items-center mb-1">
-    <label class="form-label small fw-semibold mb-0"><i class="bi bi-pin-map-fill text-danger"></i> Ubicación exacta en el mapa:</label>
-    
-    <!-- Botón de GPS -->
-    <button type="button" id="btn-gps" class="btn btn-outline-primary btn-sm py-1 px-2 rounded-pill" style="font-size: 0.78rem;" onclick="obtenerUbicacionGPS()">
-      <i class="bi bi-crosshair"></i> Usar mi ubicación actual (GPS)
-    </button>
-  </div>
-  
-  <div id="mapa-formulario" class="border"></div>
-  <small class="text-muted" style="font-size: 0.75rem;">Haz clic en el mapa o usa el botón de GPS para ubicar la incidencia.</small>
-</div>
-
-    <!-- Formulario para Registrar Nueva Incidencia -->
+    <!-- Formulario único -->
     <div class="card shadow-sm border-0 mb-4">
       <div class="card-body p-4">
         <h5 class="fw-bold card-title mb-3 text-primary"><i class="bi bi-plus-circle-fill"></i> Reportar Nueva Incidencia</h5>
@@ -80,11 +64,16 @@
             </div>
           </div>
 
-          <!-- Selección en el Mapa -->
+          <!-- Mapa con Botón GPS integrado -->
           <div class="mb-3">
-            <label class="form-label small fw-semibold"><i class="bi bi-pin-map-fill text-danger"></i> Selecciona la ubicación exacta en el mapa:</label>
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <label class="form-label small fw-semibold mb-0"><i class="bi bi-pin-map-fill text-danger"></i> Ubicación exacta en el mapa:</label>
+              <button type="button" id="btn-gps" class="btn btn-outline-primary btn-sm py-1 px-2 rounded-pill" style="font-size: 0.78rem;" onclick="obtenerUbicacionGPS()">
+                <i class="bi bi-crosshair"></i> Usar mi ubicación actual (GPS)
+              </button>
+            </div>
             <div id="mapa-formulario" class="border"></div>
-            <small class="text-muted" style="font-size: 0.75rem;">Haz clic en el mapa para mover el marcador al lugar exacto.</small>
+            <small class="text-muted" style="font-size: 0.75rem;">Haz clic en el mapa o presiona el botón GPS para ubicar la incidencia.</small>
           </div>
 
           <div class="mb-3">
@@ -114,7 +103,7 @@
       </div>
     </div>
 
-    <!-- Filtros y Listado -->
+    <!-- Lista de Reportes -->
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h5 class="fw-bold mb-0">Reportes Recientes</h5>
       <button class="btn btn-sm btn-outline-primary" onclick="cargarIncidencias()"><i class="bi bi-arrow-clockwise"></i> Actualizar</button>
@@ -129,7 +118,6 @@
   <!-- Scripts -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <!-- Leaflet JS (Mapa) -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="scrip.js"></script>
 </body>
