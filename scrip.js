@@ -1,14 +1,47 @@
-// Configuración de Supabase (Reemplaza con tus credenciales de Supabase)
 const SUPABASE_URL = 'https://kbxsszmpritrafmqyqbr.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_b-iHd631PbjPe11mR_uU4g_ETn-0yzs';
 const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// Inicializar al cargar la página
+// Variables para el mapa
+let mapa;
+let marcador;
+// Coordenadas por defecto: Sánchez Taboada, Tijuana
+let latSeleccionada = 32.4825;
+let lngSeleccionada = -116.9855;
+
 document.addEventListener('DOMContentLoaded', () => {
+  inicializarMapa();
   cargarIncidencias();
 });
 
-// Control visual para adjuntar fotografías
+// Inicializar Mapa con Leaflet
+function inicializarMapa() {
+  mapa = L.map('mapa-formulario').setView([latSeleccionada, lngSeleccionada], 15);
+
+  // Cargar mapa libre de OpenStreetMap
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '© OpenStreetMap'
+  }).addTo(mapa);
+
+  // Crear marcador arrastrable/seleccionable
+  marcador = L.marker([latSeleccionada, lngSeleccionada], { draggable: true }).addTo(mapa);
+
+  // Evento al hacer clic en el mapa
+  mapa.on('click', (e) => {
+    latSeleccionada = e.latlng.lat;
+    lngSeleccionada = e.latlng.lng;
+    marcador.setLatLng([latSeleccionada, lngSeleccionada]);
+  });
+
+  // Evento al arrastrar el marcador
+  marcador.on('dragend', (e) => {
+    const position = marcador.getLatLng();
+    latSeleccionada = position.lat;
+    lngSeleccionada = position.lng;
+  });
+}
+
 function mostrarVistaPrevia(event) {
   const file = event.target.files[0];
   if (file) {
@@ -27,7 +60,7 @@ function cancelarFoto() {
   document.getElementById('image-preview').src = '';
 }
 
-// Cargar listado de incidencias desde Supabase
+// Cargar listado de incidencias
 async function cargarIncidencias() {
   const container = document.getElementById('incidencias-container');
   if (!container) return;
@@ -52,6 +85,10 @@ async function cargarIncidencias() {
     if (item.estado === 'En revisión') badgeClass = 'bg-info text-dark';
     if (item.estado === 'Atendido') badgeClass = 'bg-success';
 
+    const urlGoogleMaps = (item.lat && item.lng) 
+      ? `https://www.google.com/maps?q=${item.lat},${item.lng}` 
+      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.ubicacion + ' Sanchez Taboada Tijuana')}`;
+
     return `
       <div class="card card-incidencia shadow-sm mb-3">
         <div class="card-body">
@@ -65,6 +102,9 @@ async function cargarIncidencias() {
 
           <p class="small text-muted mb-2">
             <i class="bi bi-geo-alt-fill text-danger"></i> <strong>Ubicación:</strong> ${item.ubicacion}
+            <a href="${urlGoogleMaps}" target="_blank" class="ms-2 btn btn-outline-danger btn-sm py-0 px-2 rounded-pill" style="font-size: 0.72rem;">
+              <i class="bi bi-map"></i> Ver en Google Maps
+            </a>
           </p>
 
           <p class="card-text mb-3">${item.descripcion}</p>
@@ -84,7 +124,7 @@ async function cargarIncidencias() {
   }).join('');
 }
 
-// Guardar nueva incidencia
+// Guardar incidencia con coordenadas
 async function crearIncidencia() {
   const titulo = document.getElementById('inc-titulo').value.trim();
   const tipo = document.getElementById('inc-tipo').value;
@@ -104,7 +144,6 @@ async function crearIncidencia() {
 
   let imagenPublicaUrl = null;
 
-  // Subir foto a Supabase Storage si existe
   if (file) {
     const fileExt = file.name.split('.').pop();
     const fileName = `incidencia_${Date.now()}.${fileExt}`;
@@ -126,13 +165,14 @@ async function crearIncidencia() {
     imagenPublicaUrl = urlData.publicUrl;
   }
 
-  // Insertar en la base de datos
   const { error: insertError } = await _supabase.from('incidencias').insert([{
     titulo: titulo,
     tipo: tipo,
     ubicacion: ubicacion,
     descripcion: descripcion,
     imagen_url: imagenPublicaUrl,
+    lat: latSeleccionada,
+    lng: lngSeleccionada,
     estado: 'Pendiente'
   }]);
 
