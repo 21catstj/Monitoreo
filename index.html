@@ -19,22 +19,46 @@
     .preview-container { position: relative; display: inline-block; }
     .preview-container img { max-height: 150px; border-radius: 8px; object-fit: cover; }
     .btn-remove-preview { position: absolute; top: -5px; right: -5px; border-radius: 50%; padding: 2px 6px; font-size: 0.75rem; }
-    .badge-estado { font-size: 0.75rem; padding: 6px 10px; border-radius: 20px; }
+    .badge-estado { font-size: 0.78rem; padding: 6px 12px; border-radius: 20px; cursor: pointer; }
     #mapa-formulario { height: 280px; border-radius: 10px; width: 100%; z-index: 1; }
   </style>
 </head>
 <body>
 
-  <header class="header-banner p-4 shadow-sm mb-4 text-center">
+  <header class="header-banner p-4 shadow-sm mb-3 text-center">
     <div class="container" style="max-width: 720px;">
       <h3 class="fw-bold mb-1"><i class="bi bi-geo-alt-fill text-warning"></i> Incidencias Sánchez Taboada</h3>
       <p class="small text-white-50 mb-0">Plataforma ciudadana para el reporte y seguimiento de problemas comunitarios</p>
     </div>
   </header>
 
+  <!-- Contadores resumidos entre Header y Formulario -->
+  <div class="container mb-4" style="max-width: 720px;">
+    <div class="row g-2 text-center">
+      <div class="col-4">
+        <div class="card border-0 shadow-sm bg-warning bg-opacity-10 py-2">
+          <span class="text-warning-emphasis fw-bold fs-4 mb-0" id="cant-pendientes">0</span>
+          <span class="small text-muted fw-semibold">Pendientes</span>
+        </div>
+      </div>
+      <div class="col-4">
+        <div class="card border-0 shadow-sm bg-info bg-opacity-10 py-2">
+          <span class="text-info-emphasis fw-bold fs-4 mb-0" id="cant-revision">0</span>
+          <span class="small text-muted fw-semibold">En Revisión</span>
+        </div>
+      </div>
+      <div class="col-4">
+        <div class="card border-0 shadow-sm bg-success bg-opacity-10 py-2">
+          <span class="text-success fw-bold fs-4 mb-0" id="cant-atendidos">0</span>
+          <span class="small text-muted fw-semibold">Atendidos / Cerrados</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="container" style="max-width: 720px;">
 
-    <!-- Formulario único -->
+    <!-- Formulario para Registrar Nueva Incidencia -->
     <div class="card shadow-sm border-0 mb-4">
       <div class="card-body p-4">
         <h5 class="fw-bold card-title mb-3 text-primary"><i class="bi bi-plus-circle-fill"></i> Reportar Nueva Incidencia</h5>
@@ -64,7 +88,7 @@
             </div>
           </div>
 
-          <!-- Mapa con Botón GPS integrado -->
+          <!-- Mapa con Botón GPS -->
           <div class="mb-3">
             <div class="d-flex justify-content-between align-items-center mb-1">
               <label class="form-label small fw-semibold mb-0"><i class="bi bi-pin-map-fill text-danger"></i> Ubicación exacta en el mapa:</label>
@@ -73,7 +97,7 @@
               </button>
             </div>
             <div id="mapa-formulario" class="border"></div>
-            <small class="text-muted" style="font-size: 0.75rem;">Haz clic en el mapa o presiona el botón GPS para ubicar la incidencia.</small>
+            <small class="text-muted" style="font-size: 0.75rem;">Haz clic en el mapa o usa el botón GPS para seleccionar el lugar exacto.</small>
           </div>
 
           <div class="mb-3">
@@ -103,7 +127,7 @@
       </div>
     </div>
 
-    <!-- Lista de Reportes -->
+    <!-- Lista de Reportes y Paginación -->
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h5 class="fw-bold mb-0">Reportes Recientes</h5>
       <button class="btn btn-sm btn-outline-primary" onclick="cargarIncidencias()"><i class="bi bi-arrow-clockwise"></i> Actualizar</button>
@@ -111,6 +135,13 @@
 
     <div id="incidencias-container">
       <div class="text-center py-4 text-muted">Cargando reportes registrados...</div>
+    </div>
+
+    <!-- Paginador -->
+    <div class="d-flex justify-content-between align-items-center my-4" id="paginacion-controls">
+      <button class="btn btn-outline-secondary btn-sm rounded-pill px-3" id="btn-prev" onclick="cambiarPagina(-1)"><i class="bi bi-chevron-left"></i> Anterior</button>
+      <span class="small text-muted fw-semibold" id="info-pagina">Página 1</span>
+      <button class="btn btn-outline-secondary btn-sm rounded-pill px-3" id="btn-next" onclick="cambiarPagina(1)">Siguiente <i class="bi bi-chevron-right"></i></button>
     </div>
 
   </div>

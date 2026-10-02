@@ -2,11 +2,16 @@ const SUPABASE_URL = 'https://kbxsszmpritrafmqyqbr.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_b-iHd631PbjPe11mR_uU4g_ETn-0yzs';
 const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// Variables para el mapa
 let mapa;
 let marcador;
-// Coordenadas por defecto: Sánchez Taboada, Tijuana
 let latSeleccionada = 32.4825;
 let lngSeleccionada = -116.9855;
+
+// Variables de Paginación y Datos
+let listaIncidencias = [];
+let paginaActual = 1;
+const reportesPorPagina = 10;
 
 document.addEventListener('DOMContentLoaded', () => {
   inicializarMapa();
@@ -43,7 +48,6 @@ async function actualizarPosicion(lat, lng) {
   await autocompletarNombreCalle(lat, lng);
 }
 
-// Función GPS mejorada
 function obtenerUbicacionGPS() {
   if (!navigator.geolocation) {
     alert('Tu dispositivo o navegador no soporta geolocalización GPS.');
@@ -51,7 +55,7 @@ function obtenerUbicacionGPS() {
   }
 
   const btnGps = document.getElementById('btn-gps');
-  if (btnGps) btnGps.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Obteniendo señal GPS...';
+  if (btnGps) btnGps.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Obteniendo GPS...';
 
   navigator.geolocation.getCurrentPosition(
     async (position) => {
@@ -59,7 +63,7 @@ function obtenerUbicacionGPS() {
       const lng = position.coords.longitude;
 
       if (mapa) {
-        mapa.invalidateSize(); // Refresca el lienzo del mapa por si acaso
+        mapa.invalidateSize();
         mapa.setView([lat, lng], 17);
       }
       
@@ -69,7 +73,7 @@ function obtenerUbicacionGPS() {
     },
     (error) => {
       if (btnGps) btnGps.innerHTML = '<i class="bi bi-crosshair"></i> Usar mi ubicación actual (GPS)';
-      alert('Error de GPS: Asegúrate de aceptar el permiso de ubicación que solicita el navegador.');
+      alert('Error de GPS: Asegúrate de aceptar los permisos de ubicación.');
     },
     { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
   );
@@ -116,6 +120,7 @@ function cancelarFoto() {
   document.getElementById('image-preview').src = '';
 }
 
+// Cargar todas las incidencias y actualizar contadores
 async function cargarIncidencias() {
   const container = document.getElementById('incidencias-container');
   if (!container) return;
@@ -130,15 +135,56 @@ async function cargarIncidencias() {
     return;
   }
 
-  if (!incidencias || incidencias.length === 0) {
+  listaIncidencias = incidencias || [];
+  paginaActual = 1; // Reiniciar a la primera página
+
+  actualizarContadores();
+  renderizarPagina();
+}
+
+// Calcular y mostrar la cantidad de reportes según su estado
+function actualizarContadores() {
+  let pendientes = 0;
+  let revision = 0;
+  let atendidos = 0;
+
+  listaIncidencias.forEach(item => {
+    const estado = item.estado || 'Pendiente';
+    if (estado === 'Pendiente') pendientes++;
+    else if (estado === 'En revisión') revision++;
+    else if (estado === 'Atendido' || estado === 'Cerrado') atendidos++;
+  });
+
+  document.getElementById('cant-pendientes').innerText = pendientes;
+  document.getElementById('cant-revision').innerText = revision;
+  document.getElementById('cant-atendidos').innerText = atendidos;
+}
+
+// Renderizar la lista con paginación
+function renderizarPagina() {
+  const container = document.getElementById('incidencias-container');
+  if (!container) return;
+
+  if (listaIncidencias.length === 0) {
     container.innerHTML = `<div class="text-center py-4 text-muted">No hay reportes registrados aún. ¡Sé el primero en reportar una incidencia!</div>`;
+    document.getElementById('paginacion-controls').classList.add('d-none');
     return;
   }
 
-  container.innerHTML = incidencias.map(item => {
+  document.getElementById('paginacion-controls').classList.remove('d-none');
+
+  const totalPaginas = Math.ceil(listaIncidencias.length / reportesPorPagina);
+  if (paginaActual > totalPaginas) paginaActual = totalPaginas;
+  if (paginaActual < 1) paginaActual = 1;
+
+  const inicio = (paginaActual - 1) * reportesPorPagina;
+  const fin = inicio + reportesPorPagina;
+  const paginaItems = listaIncidencias.slice(inicio, fin);
+
+  container.innerHTML = paginaItems.map(item => {
     let badgeClass = 'bg-warning text-dark';
     if (item.estado === 'En revisión') badgeClass = 'bg-info text-dark';
-    if (item.estado === 'Atendido') badgeClass = 'bg-success';
+    if (item.estado === 'Atendido' || item.estado === 'Cerrado') badgeClass = 'bg-success text-white';
 
     const urlGoogleMaps = (item.lat && item.lng) 
       ? `https://www.google.com/maps?q=${item.lat},${item.lng}` 
@@ -152,7 +198,19 @@ async function cargarIncidencias() {
               <span class="badge bg-secondary mb-1">${item.tipo}</span>
               <h5 class="fw-bold mb-1">${item.titulo}</h5>
             </div>
-            <span class="badge ${badgeClass} badge-estado">${item.estado || 'Pendiente'}</span>
+            
+            <!-- Desplegable para cambiar el Estado -->
+            <div class="dropdown">
+              <button class="btn btn-sm ${badgeClass} dropdown-toggle badge-estado shadow-sm" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                ${item.estado || 'Pendiente'}
+              </button>
+              <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                <li><h6 class="dropdown-header">Cambiar Estado</h6></li>
+                <li><a class="dropdown-item small" href="javascript:void(0)" onclick="cambiarEstado('${item.id}', 'Pendiente')">⏳ Pendiente</a></li>
+                <li><a class="dropdown-item small" href="javascript:void(0)" onclick="cambiarEstado('${item.id}', 'En revisión')">🔍 En revisión</a></li>
+                <li><a class="dropdown-item small" href="javascript:void(0)" onclick="cambiarEstado('${item.id}', 'Atendido')">✅ Atendido / Cerrado</a></li>
+              </ul>
+            </div>
           </div>
 
           <p class="small text-muted mb-2">
@@ -177,8 +235,39 @@ async function cargarIncidencias() {
       </div>
     `;
   }).join('');
+
+  // Actualizar controles del paginador
+  document.getElementById('info-pagina').innerText = `Página ${paginaActual} de ${totalPaginas}`;
+  document.getElementById('btn-prev').disabled = (paginaActual === 1);
+  document.getElementById('btn-next').disabled = (paginaActual === totalPaginas);
 }
 
+// Navegar entre páginas
+function cambiarPagina(direccion) {
+  paginaActual += direccion;
+  renderizarPagina();
+}
+
+// Cambiar el estado de un reporte en Supabase
+async function cambiarEstado(id, nuevoEstado) {
+  const { error } = await _supabase
+    .from('incidencias')
+    .update({ estado: nuevoEstado })
+    .eq('id', id);
+
+  if (error) {
+    alert('Error al cambiar el estado: ' + error.message);
+  } else {
+    // Actualizar estado localmente sin recargar toda la página
+    const item = listaIncidencias.find(i => i.id == id);
+    if (item) item.estado = nuevoEstado;
+    
+    actualizarContadores();
+    renderizarPagina();
+  }
+}
+
+// Guardar nueva incidencia
 async function crearIncidencia() {
   const titulo = document.getElementById('inc-titulo').value.trim();
   const tipo = document.getElementById('inc-tipo').value;
