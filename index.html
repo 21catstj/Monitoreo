@@ -22,16 +22,20 @@
 </head>
 <body>
 
-  <header class="header-banner p-4 shadow-sm mb-3 text-center">
-    <div class="position-absolute top-0 end-0 p-3">
-      <button id="btn-auth-header" class="btn btn-sm btn-outline-light rounded-pill" data-bs-toggle="modal" data-bs-target="#modalLogin">
-        <i class="bi bi-person-lock"></i> Acceso Admin
-      </button>
-    </div>
-
+<header class="header-banner p-3 p-sm-4 shadow-sm mb-3">
     <div class="container" style="max-width: 720px;">
-      <h3 class="fw-bold mb-1"><i class="bi bi-geo-alt-fill text-warning"></i> Incidencias Sánchez Taboada</h3>
-      <p class="small text-white-50 mb-0">Plataforma ciudadana para el reporte y seguimiento de problemas comunitarios</p>
+      <!-- Fila superior para el botón de acceso (sin position-absolute) -->
+      <div class="d-flex justify-content-end mb-2">
+        <button id="btn-auth-header" class="btn btn-sm btn-outline-light rounded-pill" data-bs-toggle="modal" data-bs-target="#modalLogin">
+          <i class="bi bi-person-lock"></i> Acceso Admin
+        </button>
+      </div>
+
+      <!-- Título y descripción centrados con tamaño adaptable -->
+      <div class="text-center">
+        <h3 class="fw-bold mb-1 fs-4 fs-md-3"><i class="bi bi-geo-alt-fill text-warning"></i> Incidencias Sánchez Taboada</h3>
+        <p class="small text-white-50 mb-0">Plataforma ciudadana para el reporte y seguimiento de problemas comunitarios</p>
+      </div>
     </div>
   </header>
 
