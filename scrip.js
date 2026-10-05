@@ -219,12 +219,13 @@ function actualizarContadores() {
   document.getElementById('cant-atendidos').innerText = atendidos;
 }
 
+// Renderizar tarjetas de reportes
 function renderizarPagina() {
   const container = document.getElementById('incidencias-container');
   if (!container) return;
 
   if (listaIncidencias.length === 0) {
-    container.innerHTML = `<div class="text-center py-4 text-muted">No hay reportes registrados aún. ¡Sé el primero en reportar una incidencia!</div>`;
+    container.innerHTML = `<div class="text-center py-4 text-muted">No hay reportes registrados aún.</div>`;
     document.getElementById('paginacion-controls').classList.add('d-none');
     return;
   }
@@ -248,21 +249,27 @@ function renderizarPagina() {
       ? `https://www.google.com/maps?q=${item.lat},${item.lng}` 
       : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.ubicacion + ' Sanchez Taboada Tijuana')}`;
 
-    // Control del botón de estado según autenticación
-    let htmlEstado = `<span class="badge ${badgeClass} badge-estado shadow-sm">${item.estado || 'Pendiente'}</span>`;
+    // Menú de opciones si está autenticado
+    let htmlOpciones = `<span class="badge ${badgeClass} badge-estado shadow-sm">${item.estado || 'Pendiente'}</span>`;
 
     if (usuarioAutenticado) {
-      htmlEstado = `
-        <div class="dropdown">
-          <button class="btn btn-sm ${badgeClass} dropdown-toggle badge-estado shadow-sm" type="button" data-bs-toggle="dropdown">
-            ${item.estado || 'Pendiente'}
-          </button>
-          <ul class="dropdown-menu dropdown-menu-end shadow-sm">
-            <li><h6 class="dropdown-header">Cambiar Estado</h6></li>
-            <li><a class="dropdown-item small" href="javascript:void(0)" onclick="cambiarEstado('${item.id}', 'Pendiente')">⏳ Pendiente</a></li>
-            <li><a class="dropdown-item small" href="javascript:void(0)" onclick="cambiarEstado('${item.id}', 'En revisión')">🔍 En revisión</a></li>
-            <li><a class="dropdown-item small" href="javascript:void(0)" onclick="cambiarEstado('${item.id}', 'Atendido')">✅ Atendido / Cerrado</a></li>
-          </ul>
+      htmlOpciones = `
+        <div class="d-flex align-items-center gap-1">
+          <span class="badge ${badgeClass} badge-estado shadow-sm">${item.estado || 'Pendiente'}</span>
+          <div class="dropdown">
+            <button class="btn btn-sm btn-light border-0 py-0 px-1" type="button" data-bs-toggle="dropdown">
+              <i class="bi bi-three-dots-vertical fs-6 text-muted"></i>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+              <li><h6 class="dropdown-header">Cambiar Estado</h6></li>
+              <li><a class="dropdown-item small" href="javascript:void(0)" onclick="cambiarEstado('${item.id}', 'Pendiente')">⏳ Pendiente</a></li>
+              <li><a class="dropdown-item small" href="javascript:void(0)" onclick="cambiarEstado('${item.id}', 'En revisión')">🔍 En revisión</a></li>
+              <li><a class="dropdown-item small" href="javascript:void(0)" onclick="cambiarEstado('${item.id}', 'Atendido')">✅ Atendido / Cerrado</a></li>
+              <li><hr class="dropdown-divider"></li>
+              <li><a class="dropdown-item small text-primary" href="javascript:void(0)" onclick="prepararEdicion('${item.id}')"><i class="bi bi-pencil-fill me-1"></i> Editar reporte</a></li>
+              <li><a class="dropdown-item small text-danger" href="javascript:void(0)" onclick="eliminarIncidencia('${item.id}')"><i class="bi bi-trash-fill me-1"></i> Eliminar reporte</a></li>
+            </ul>
+          </div>
         </div>
       `;
     }
@@ -275,7 +282,7 @@ function renderizarPagina() {
               <span class="badge bg-secondary mb-1">${item.tipo}</span>
               <h5 class="fw-bold mb-1">${item.titulo}</h5>
             </div>
-            ${htmlEstado}
+            ${htmlOpciones}
           </div>
 
           <p class="small text-muted mb-2">
@@ -304,6 +311,81 @@ function renderizarPagina() {
   document.getElementById('info-pagina').innerText = `Página ${paginaActual} de ${totalPaginas}`;
   document.getElementById('btn-prev').disabled = (paginaActual === 1);
   document.getElementById('btn-next').disabled = (paginaActual === totalPaginas);
+}
+
+// Cargar datos en el modal de edición
+function prepararEdicion(id) {
+  const item = listaIncidencias.find(i => i.id == id);
+  if (!item) return;
+
+  document.getElementById('edit-id').value = item.id;
+  document.getElementById('edit-titulo').value = item.titulo;
+  document.getElementById('edit-tipo').value = item.tipo;
+  document.getElementById('edit-ubicacion').value = item.ubicacion;
+  document.getElementById('edit-descripcion').value = item.descripcion;
+
+  const modalEl = document.getElementById('modalEditar');
+  const modal = new bootstrap.Modal(modalEl);
+  modal.show();
+}
+
+// Guardar cambios editados en Supabase
+async function guardarEdicion() {
+  const id = document.getElementById('edit-id').value;
+  const titulo = document.getElementById('edit-titulo').value.trim();
+  const tipo = document.getElementById('edit-tipo').value;
+  const ubicacion = document.getElementById('edit-ubicacion').value.trim();
+  const descripcion = document.getElementById('edit-descripcion').value.trim();
+  const btnGuardar = document.getElementById('btn-guardar-edit');
+
+  btnGuardar.disabled = true;
+  btnGuardar.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Guardando...`;
+
+  const { error } = await _supabase
+    .from('incidencias')
+    .update({ titulo, tipo, ubicacion, descripcion })
+    .eq('id', id);
+
+  btnGuardar.disabled = false;
+  btnGuardar.innerText = 'Guardar Cambios';
+
+  if (error) {
+    alert('Error al actualizar el reporte: ' + error.message);
+  } else {
+    // Actualizar elemento localmente
+    const item = listaIncidencias.find(i => i.id == id);
+    if (item) {
+      item.titulo = titulo;
+      item.tipo = tipo;
+      item.ubicacion = ubicacion;
+      item.descripcion = descripcion;
+    }
+
+    // Cerrar modal y refrescar la vista
+    const modalEl = document.getElementById('modalEditar');
+    const modal = bootstrap.Modal.getInstance(modalEl);
+    if (modal) modal.hide();
+
+    renderizarPagina();
+  }
+}
+
+// Eliminar un reporte de Supabase
+async function eliminarIncidencia(id) {
+  if (!confirm('¿Estás seguro de que deseas eliminar este reporte de forma permanente?')) return;
+
+  const { error } = await _supabase
+    .from('incidencias')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    alert('Error al eliminar el reporte: ' + error.message);
+  } else {
+    listaIncidencias = listaIncidencias.filter(i => i.id != id);
+    actualizarContadores();
+    renderizarPagina();
+  }
 }
 
 function cambiarPagina(direccion) {
