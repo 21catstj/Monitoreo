@@ -1,169 +1,186 @@
-// ==========================================
-// VARIABLES GLOBALES
-// ==========================================
-let map = null;
-let marker = null;
-let latSeleccionada = null;
-let lngSeleccionada = null;
+const SUPABASE_URL = 'https://kbxsszmpritrafmqyqbr.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_b-iHd631PbjPe11mR_uU4g_ETn-0yzs';
+const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let mapa;
+let marcador;
+let latSeleccionada = 32.4825;
+let lngSeleccionada = -116.9855;
 
 let listaIncidencias = [];
 let paginaActual = 1;
 const reportesPorPagina = 10;
-let usuarioAutenticado = false;
+let usuarioAutenticado = null;
 
-// Coordenadas iniciales (Sánchez Taboada, Tijuana)
-const LAT_INICIAL = 32.468;
-const LNG_INICIAL = -116.980;
-
-// ==========================================
-// 1. INICIALIZACIÓN (MAPA Y AUTENTICACIÓN)
-// ==========================================
-
-document.addEventListener('DOMContentLoaded', () => {
-  initMap();
-  initAuth();
+document.addEventListener('DOMContentLoaded', async () => {
+  inicializarMapa();
+  await verificarSesion();
   cargarIncidencias();
 });
 
-// Inicializar Mapa Leaflet
-function initMap() {
-  const mapContainer = document.getElementById('map');
-  if (!mapContainer) return;
-
-  // Crear instancia del mapa centrada en la Sánchez Taboada
-  map = L.map('map').setView([LAT_INICIAL, LNG_INICIAL], 14);
-
-  // Cargar capa de OpenStreetMap
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '© OpenStreetMap'
-  }).addTo(map);
-
-  // Evento al hacer clic en el mapa para fijar pin de ubicación
-  map.on('click', (e) => {
-    const { lat, lng } = e.latlng;
-    colocarMarcador(lat, lng);
-  });
+// Verificar si hay usuario con sesión activa
+async function verificarSesion() {
+  const { data: { session } } = await _supabase.auth.getSession();
+  usuarioAutenticado = session ? session.user : null;
+  actualizarBotonHeader();
 }
 
-// Colocar o mover el marcador en el mapa
-function colocarMarcador(lat, lng) {
-  latSeleccionada = lat;
-  lngSeleccionada = lng;
-
-  if (marker) {
-    marker.setLatLng([lat, lng]);
-  } else {
-    marker = L.marker([lat, lng]).addTo(map);
-  }
-
-  const inputUbicacion = document.getElementById('inc-ubicacion');
-  if (inputUbicacion && !inputUbicacion.value) {
-    inputUbicacion.value = `Ubicación marcada en mapa (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
-  }
-}
-
-// Obtener ubicación GPS actual del usuario
-function usarUbicacionActual() {
-  if (!navigator.geolocation) {
-    alert('La geolocalización no está soportada por tu navegador.');
-    return;
-  }
-
-  navigator.geolocation.getCurrentPosition(
-    (position) => {
-      const lat = position.coords.latitude;
-      const lng = position.coords.longitude;
-      map.setView([lat, lng], 16);
-      colocarMarcador(lat, lng);
-    },
-    (error) => {
-      alert('No se pudo obtener tu ubicación actual: ' + error.message);
-    }
-  );
-}
-
-// Escuchar cambios en la sesión de Supabase
-function initAuth() {
-  _supabase.auth.onAuthStateChange((event, session) => {
-    usuarioAutenticado = !!session;
-    actualizarUIAuth(session);
-    renderizarPagina();
-  });
-}
-
-// Actualizar botón del header según el estado de la sesión
-function actualizarUIAuth(session) {
+function actualizarBotonHeader() {
   const btnAuth = document.getElementById('btn-auth-header');
-  if (btnAuth) {
-    if (session) {
-      btnAuth.innerHTML = `<i class="bi bi-box-arrow-right"></i> Cerrar Sesión`;
-      btnAuth.onclick = cerrarSesion;
-      btnAuth.removeAttribute('data-bs-toggle');
-      btnAuth.removeAttribute('data-bs-target');
-    } else {
-      btnAuth.innerHTML = `<i class="bi bi-person-lock"></i> Acceso Admin`;
-      btnAuth.onclick = null;
-      btnAuth.setAttribute('data-bs-toggle', 'modal');
-      btnAuth.setAttribute('data-bs-target', '#modalLogin');
-    }
+  if (!btnAuth) return;
+
+  if (usuarioAutenticado) {
+    btnAuth.innerHTML = `<i class="bi bi-box-arrow-right"></i> Cerrar Sesión (${usuarioAutenticado.email.split('@')[0]})`;
+    btnAuth.removeAttribute('data-bs-toggle');
+    btnAuth.removeAttribute('data-bs-target');
+    btnAuth.onclick = cerrarSesion;
+  } else {
+    btnAuth.innerHTML = `<i class="bi bi-person-lock"></i> Acceso Admin`;
+    btnAuth.setAttribute('data-bs-toggle', 'modal');
+    btnAuth.setAttribute('data-bs-target', '#modalLogin');
+    btnAuth.onclick = null;
   }
 }
 
-// Iniciar Sesión Admin
 async function iniciarSesion() {
-  const email = document.getElementById('login-email').value;
-  const password = document.getElementById('login-password').value;
-  const btn = document.getElementById('btn-login');
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value.trim();
+  const btn = document.getElementById('btn-login-submit');
 
   btn.disabled = true;
-  btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Entrando...`;
+  btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Verificando...`;
 
   const { data, error } = await _supabase.auth.signInWithPassword({ email, password });
 
   btn.disabled = false;
-  btn.innerText = 'Iniciar Sesión';
+  btn.innerText = 'Ingresar';
 
   if (error) {
-    alert('Error de acceso: ' + error.message);
+    alert('Error al iniciar sesión: ' + error.message);
   } else {
+    usuarioAutenticado = data.user;
+    
+    // Cerrar modal
     const modalEl = document.getElementById('modalLogin');
     const modal = bootstrap.Modal.getInstance(modalEl);
     if (modal) modal.hide();
+
+    actualizarBotonHeader();
+    renderizarPagina(); // Volver a renderizar para activar la edición de estados
+    alert('¡Bienvenido! Ahora tienes permisos de administrador.');
   }
 }
 
-// Cerrar Sesión Admin
 async function cerrarSesion() {
   await _supabase.auth.signOut();
-  cargarIncidencias();
+  usuarioAutenticado = null;
+  actualizarBotonHeader();
+  renderizarPagina(); // Desactivar la edición de estados
+  alert('Sesión cerrada correctamente.');
 }
 
-// Previsualizar foto adjunta
-function previsualizarImagen(event) {
-  const file = event.target.files[0];
-  const preview = document.getElementById('img-preview');
-  const previewContainer = document.getElementById('preview-container');
+function inicializarMapa() {
+  const container = document.getElementById('mapa-formulario');
+  if (!container) return;
 
-  if (file && preview && previewContainer) {
-    preview.src = URL.createObjectURL(file);
-    previewContainer.classList.remove('d-none');
+  mapa = L.map('mapa-formulario').setView([latSeleccionada, lngSeleccionada], 15);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '© OpenStreetMap'
+  }).addTo(mapa);
+
+  marcador = L.marker([latSeleccionada, lngSeleccionada], { draggable: true }).addTo(mapa);
+
+  mapa.on('click', (e) => {
+    actualizarPosicion(e.latlng.lat, e.latlng.lng);
+  });
+
+  marcador.on('dragend', (e) => {
+    const pos = marcador.getLatLng();
+    actualizarPosicion(pos.lat, pos.lng);
+  });
+}
+
+async function actualizarPosicion(lat, lng) {
+  latSeleccionada = lat;
+  lngSeleccionada = lng;
+  marcador.setLatLng([lat, lng]);
+  await autocompletarNombreCalle(lat, lng);
+}
+
+function obtenerUbicacionGPS() {
+  if (!navigator.geolocation) {
+    alert('Tu dispositivo no soporta geolocalización GPS.');
+    return;
+  }
+
+  const btnGps = document.getElementById('btn-gps');
+  if (btnGps) btnGps.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Obteniendo GPS...';
+
+  navigator.geolocation.getCurrentPosition(
+    async (position) => {
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+
+      if (mapa) {
+        mapa.invalidateSize();
+        mapa.setView([lat, lng], 17);
+      }
+      
+      await actualizarPosicion(lat, lng);
+
+      if (btnGps) btnGps.innerHTML = '<i class="bi bi-crosshair"></i> Usar mi ubicación actual (GPS)';
+    },
+    (error) => {
+      if (btnGps) btnGps.innerHTML = '<i class="bi bi-crosshair"></i> Usar mi ubicación actual (GPS)';
+      alert('Error de GPS: Permite el acceso a la ubicación en tu navegador.');
+    },
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+  );
+}
+
+async function autocompletarNombreCalle(lat, lng) {
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`);
+    const data = await res.json();
+    
+    if (data && data.address) {
+      const calle = data.address.road || data.address.pedestrian || data.address.suburb || '';
+      const colonia = data.address.neighbourhood || data.address.suburb || '';
+      
+      let direccion = calle;
+      if (colonia && !calle.includes(colonia)) {
+        direccion += (direccion ? ', ' : '') + colonia;
+      }
+
+      if (direccion) {
+        document.getElementById('inc-ubicacion').value = direccion;
+      }
+    }
+  } catch (err) {
+    console.log('Error al obtener calle:', err);
   }
 }
 
-// Cancelar/Quitar foto adjunta
-function cancelarFoto() {
-  const input = document.getElementById('inc-file');
-  const previewContainer = document.getElementById('preview-container');
-  if (input) input.value = '';
-  if (previewContainer) previewContainer.classList.add('d-none');
+function mostrarVistaPrevia(event) {
+  const file = event.target.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      document.getElementById('image-preview').src = e.target.result;
+      document.getElementById('image-preview-wrapper').classList.remove('d-none');
+    };
+    reader.readAsDataURL(file);
+  }
 }
 
-// ==========================================
-// 2. CARGA Y FILTRADO DE DATOS (SUPABASE)
-// ==========================================
+function cancelarFoto() {
+  document.getElementById('inc-file').value = '';
+  document.getElementById('image-preview-wrapper').classList.add('d-none');
+  document.getElementById('image-preview').src = '';
+}
 
-// Cargar todas las incidencias
 async function cargarIncidencias() {
   const container = document.getElementById('incidencias-container');
   if (!container) return;
@@ -185,55 +202,43 @@ async function cargarIncidencias() {
   renderizarPagina();
 }
 
-// Actualizar contadores superiores
 function actualizarContadores() {
   let pendientes = 0;
   let revision = 0;
   let atendidos = 0;
 
   listaIncidencias.forEach(item => {
-    const estado = item.estado || 'En revisión';
+    const estado = item.estado || 'Pendiente';
     if (estado === 'Pendiente') pendientes++;
     else if (estado === 'En revisión') revision++;
     else if (estado === 'Atendido' || estado === 'Cerrado') atendidos++;
   });
 
-  const elPendientes = document.getElementById('cant-pendientes');
-  const elRevision = document.getElementById('cant-revision');
-  const elAtendidos = document.getElementById('cant-atendidos');
-
-  if (elPendientes) elPendientes.innerText = pendientes;
-  if (elRevision) elRevision.innerText = revision;
-  if (elAtendidos) elAtendidos.innerText = atendidos;
+  document.getElementById('cant-pendientes').innerText = pendientes;
+  document.getElementById('cant-revision').innerText = revision;
+  document.getElementById('cant-atendidos').innerText = atendidos;
 }
 
-// Renderizar lista de reportes
+// Renderizar tarjetas de reportes
 function renderizarPagina() {
   const container = document.getElementById('incidencias-container');
   if (!container) return;
 
-  // Si NO es admin, solo se muestran reportes aprobados/publicados
-  const reportesVisibles = usuarioAutenticado 
-    ? listaIncidencias 
-    : listaIncidencias.filter(item => item.estado !== 'En revisión');
-
-  if (reportesVisibles.length === 0) {
-    container.innerHTML = `<div class="text-center py-4 text-muted">No hay reportes públicos disponibles en este momento.</div>`;
-    const pagControls = document.getElementById('paginacion-controls');
-    if (pagControls) pagControls.classList.add('d-none');
+  if (listaIncidencias.length === 0) {
+    container.innerHTML = `<div class="text-center py-4 text-muted">No hay reportes registrados aún.</div>`;
+    document.getElementById('paginacion-controls').classList.add('d-none');
     return;
   }
 
-  const pagControls = document.getElementById('paginacion-controls');
-  if (pagControls) pagControls.classList.remove('d-none');
+  document.getElementById('paginacion-controls').classList.remove('d-none');
 
-  const totalPaginas = Math.ceil(reportesVisibles.length / reportesPorPagina);
+  const totalPaginas = Math.ceil(listaIncidencias.length / reportesPorPagina);
   if (paginaActual > totalPaginas) paginaActual = totalPaginas;
   if (paginaActual < 1) paginaActual = 1;
 
   const inicio = (paginaActual - 1) * reportesPorPagina;
   const fin = inicio + reportesPorPagina;
-  const paginaItems = reportesVisibles.slice(inicio, fin);
+  const paginaItems = listaIncidencias.slice(inicio, fin);
 
   container.innerHTML = paginaItems.map(item => {
     let badgeClass = 'bg-warning text-dark';
@@ -244,19 +249,20 @@ function renderizarPagina() {
       ? `https://www.google.com/maps?q=${item.lat},${item.lng}` 
       : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.ubicacion + ' Sanchez Taboada Tijuana')}`;
 
-    let htmlOpciones = `<span class="badge ${badgeClass} badge-estado shadow-sm">${item.estado || 'En revisión'}</span>`;
+    // Menú de opciones si está autenticado
+    let htmlOpciones = `<span class="badge ${badgeClass} badge-estado shadow-sm">${item.estado || 'Pendiente'}</span>`;
 
     if (usuarioAutenticado) {
       htmlOpciones = `
         <div class="d-flex align-items-center gap-1">
-          <span class="badge ${badgeClass} badge-estado shadow-sm">${item.estado || 'En revisión'}</span>
+          <span class="badge ${badgeClass} badge-estado shadow-sm">${item.estado || 'Pendiente'}</span>
           <div class="dropdown">
-            <button class="btn btn-sm btn-light border-0 py-0 px-1" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <button class="btn btn-sm btn-light border-0 py-0 px-1" type="button" data-bs-toggle="dropdown">
               <i class="bi bi-three-dots-vertical fs-6 text-muted"></i>
             </button>
             <ul class="dropdown-menu dropdown-menu-end shadow-sm">
-              <li><h6 class="dropdown-header">Cambiar Estado / Publicar</h6></li>
-              <li><a class="dropdown-item small" href="javascript:void(0)" onclick="cambiarEstado('${item.id}', 'Pendiente')">📌 Publicar / Pendiente</a></li>
+              <li><h6 class="dropdown-header">Cambiar Estado</h6></li>
+              <li><a class="dropdown-item small" href="javascript:void(0)" onclick="cambiarEstado('${item.id}', 'Pendiente')">⏳ Pendiente</a></li>
               <li><a class="dropdown-item small" href="javascript:void(0)" onclick="cambiarEstado('${item.id}', 'En revisión')">🔍 En revisión</a></li>
               <li><a class="dropdown-item small" href="javascript:void(0)" onclick="cambiarEstado('${item.id}', 'Atendido')">✅ Atendido / Cerrado</a></li>
               <li><hr class="dropdown-divider"></li>
@@ -269,7 +275,7 @@ function renderizarPagina() {
     }
 
     return `
-      <div class="card card-incidencia shadow-sm mb-3 ${item.estado === 'En revisión' ? 'border-info border-2' : ''}">
+      <div class="card card-incidencia shadow-sm mb-3">
         <div class="card-body">
           <div class="d-flex justify-content-between align-items-start mb-2">
             <div>
@@ -302,23 +308,112 @@ function renderizarPagina() {
     `;
   }).join('');
 
-  const elInfoPagina = document.getElementById('info-pagina');
-  const btnPrev = document.getElementById('btn-prev');
-  const btnNext = document.getElementById('btn-next');
-
-  if (elInfoPagina) elInfoPagina.innerText = `Página ${paginaActual} de ${totalPaginas}`;
-  if (btnPrev) btnPrev.disabled = (paginaActual === 1);
-  if (btnNext) btnNext.disabled = (paginaActual === totalPaginas);
+  document.getElementById('info-pagina').innerText = `Página ${paginaActual} de ${totalPaginas}`;
+  document.getElementById('btn-prev').disabled = (paginaActual === 1);
+  document.getElementById('btn-next').disabled = (paginaActual === totalPaginas);
 }
 
-function cambiarPagina(delta) {
-  paginaActual += delta;
+// Cargar datos en el modal de edición
+function prepararEdicion(id) {
+  const item = listaIncidencias.find(i => i.id == id);
+  if (!item) return;
+
+  document.getElementById('edit-id').value = item.id;
+  document.getElementById('edit-titulo').value = item.titulo;
+  document.getElementById('edit-tipo').value = item.tipo;
+  document.getElementById('edit-ubicacion').value = item.ubicacion;
+  document.getElementById('edit-descripcion').value = item.descripcion;
+
+  const modalEl = document.getElementById('modalEditar');
+  const modal = new bootstrap.Modal(modalEl);
+  modal.show();
+}
+
+// Guardar cambios editados en Supabase
+async function guardarEdicion() {
+  const id = document.getElementById('edit-id').value;
+  const titulo = document.getElementById('edit-titulo').value.trim();
+  const tipo = document.getElementById('edit-tipo').value;
+  const ubicacion = document.getElementById('edit-ubicacion').value.trim();
+  const descripcion = document.getElementById('edit-descripcion').value.trim();
+  const btnGuardar = document.getElementById('btn-guardar-edit');
+
+  btnGuardar.disabled = true;
+  btnGuardar.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Guardando...`;
+
+  const { error } = await _supabase
+    .from('incidencias')
+    .update({ titulo, tipo, ubicacion, descripcion })
+    .eq('id', id);
+
+  btnGuardar.disabled = false;
+  btnGuardar.innerText = 'Guardar Cambios';
+
+  if (error) {
+    alert('Error al actualizar el reporte: ' + error.message);
+  } else {
+    // Actualizar elemento localmente
+    const item = listaIncidencias.find(i => i.id == id);
+    if (item) {
+      item.titulo = titulo;
+      item.tipo = tipo;
+      item.ubicacion = ubicacion;
+      item.descripcion = descripcion;
+    }
+
+    // Cerrar modal y refrescar la vista
+    const modalEl = document.getElementById('modalEditar');
+    const modal = bootstrap.Modal.getInstance(modalEl);
+    if (modal) modal.hide();
+
+    renderizarPagina();
+  }
+}
+
+// Eliminar un reporte de Supabase
+async function eliminarIncidencia(id) {
+  if (!confirm('¿Estás seguro de que deseas eliminar este reporte de forma permanente?')) return;
+
+  const { error } = await _supabase
+    .from('incidencias')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    alert('Error al eliminar el reporte: ' + error.message);
+  } else {
+    listaIncidencias = listaIncidencias.filter(i => i.id != id);
+    actualizarContadores();
+    renderizarPagina();
+  }
+}
+
+function cambiarPagina(direccion) {
+  paginaActual += direccion;
   renderizarPagina();
 }
 
-// ==========================================
-// 3. CREACIÓN DE REPORTE (CIUDADANO)
-// ==========================================
+async function cambiarEstado(id, nuevoEstado) {
+  if (!usuarioAutenticado) {
+    alert('Debes iniciar sesión para realizar esta acción.');
+    return;
+  }
+
+  const { error } = await _supabase
+    .from('incidencias')
+    .update({ estado: nuevoEstado })
+    .eq('id', id);
+
+  if (error) {
+    alert('Error al cambiar el estado: ' + error.message);
+  } else {
+    const item = listaIncidencias.find(i => i.id == id);
+    if (item) item.estado = nuevoEstado;
+    
+    actualizarContadores();
+    renderizarPagina();
+  }
+}
 
 async function crearIncidencia() {
   const titulo = document.getElementById('inc-titulo').value.trim();
@@ -328,7 +423,7 @@ async function crearIncidencia() {
   const inputArchivo = document.getElementById('inc-file');
   const btnGuardar = document.getElementById('btn-guardar');
 
-  const file = inputArchivo ? inputArchivo.files[0] : null;
+  const file = inputArchivo.files[0];
 
   if (!titulo || !tipo || !ubicacion || !descripcion) {
     return alert('Por favor llena todos los campos obligatorios.');
@@ -360,7 +455,6 @@ async function crearIncidencia() {
     imagenPublicaUrl = urlData.publicUrl;
   }
 
-  // Insertar con estado 'En revisión'
   const { error: insertError } = await _supabase.from('incidencias').insert([{
     titulo: titulo,
     tipo: tipo,
@@ -369,7 +463,7 @@ async function crearIncidencia() {
     imagen_url: imagenPublicaUrl,
     lat: latSeleccionada,
     lng: lngSeleccionada,
-    estado: 'En revisión'
+    estado: 'Pendiente'
   }]);
 
   btnGuardar.disabled = false;
@@ -378,110 +472,9 @@ async function crearIncidencia() {
   if (insertError) {
     alert('Error al registrar la incidencia: ' + insertError.message);
   } else {
-    alert('¡Gracias por tu reporte! Tu publicación ha sido enviada con éxito y estará en revisión antes de ser publicada.');
-    
+    alert('¡Incidencia registrada con éxito!');
     document.getElementById('form-incidencia').reset();
     cancelarFoto();
-
-    // Limpiar marcador del mapa
-    if (marker) {
-      map.removeLayer(marker);
-      marker = null;
-    }
-    latSeleccionada = null;
-    lngSeleccionada = null;
-
     cargarIncidencias();
-  }
-}
-
-// ==========================================
-// 4. FUNCIONES DE ADMINISTRACIÓN (ADMIN)
-// ==========================================
-
-async function cambiarEstado(id, nuevoEstado) {
-  const { error } = await _supabase
-    .from('incidencias')
-    .update({ estado: nuevoEstado })
-    .eq('id', id);
-
-  if (error) {
-    alert('Error al actualizar el estado: ' + error.message);
-  } else {
-    const item = listaIncidencias.find(i => i.id == id);
-    if (item) item.estado = nuevoEstado;
-
-    actualizarContadores();
-    renderizarPagina();
-  }
-}
-
-function prepararEdicion(id) {
-  const item = listaIncidencias.find(i => i.id == id);
-  if (!item) return;
-
-  document.getElementById('edit-id').value = item.id;
-  document.getElementById('edit-titulo').value = item.titulo;
-  document.getElementById('edit-tipo').value = item.tipo;
-  document.getElementById('edit-ubicacion').value = item.ubicacion;
-  document.getElementById('edit-descripcion').value = item.descripcion;
-
-  const modalEl = document.getElementById('modalEditar');
-  const modal = new bootstrap.Modal(modalEl);
-  modal.show();
-}
-
-async function guardarEdicion() {
-  const id = document.getElementById('edit-id').value;
-  const titulo = document.getElementById('edit-titulo').value.trim();
-  const tipo = document.getElementById('edit-tipo').value;
-  const ubicacion = document.getElementById('edit-ubicacion').value.trim();
-  const descripcion = document.getElementById('edit-descripcion').value.trim();
-  const btnGuardar = document.getElementById('btn-guardar-edit');
-
-  btnGuardar.disabled = true;
-  btnGuardar.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Guardando...`;
-
-  const { error } = await _supabase
-    .from('incidencias')
-    .update({ titulo, tipo, ubicacion, descripcion })
-    .eq('id', id);
-
-  btnGuardar.disabled = false;
-  btnGuardar.innerText = 'Guardar Cambios';
-
-  if (error) {
-    alert('Error al actualizar el reporte: ' + error.message);
-  } else {
-    const item = listaIncidencias.find(i => i.id == id);
-    if (item) {
-      item.titulo = titulo;
-      item.tipo = tipo;
-      item.ubicacion = ubicacion;
-      item.descripcion = descripcion;
-    }
-
-    const modalEl = document.getElementById('modalEditar');
-    const modal = bootstrap.Modal.getInstance(modalEl);
-    if (modal) modal.hide();
-
-    renderizarPagina();
-  }
-}
-
-async function eliminarIncidencia(id) {
-  if (!confirm('¿Estás seguro de que deseas eliminar este reporte de forma permanente?')) return;
-
-  const { error } = await _supabase
-    .from('incidencias')
-    .delete()
-    .eq('id', id);
-
-  if (error) {
-    alert('Error al eliminar el reporte: ' + error.message);
-  } else {
-    listaIncidencias = listaIncidencias.filter(i => i.id != id);
-    actualizarContadores();
-    renderizarPagina();
   }
 }
