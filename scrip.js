@@ -1,16 +1,169 @@
-// Variables globales de estado y paginación
+// ==========================================
+// VARIABLES GLOBALES
+// ==========================================
+let map = null;
+let marker = null;
+let latSeleccionada = null;
+let lngSeleccionada = null;
+
 let listaIncidencias = [];
 let paginaActual = 1;
 const reportesPorPagina = 10;
 let usuarioAutenticado = false;
-let latSeleccionada = null;
-let lngSeleccionada = null;
+
+// Coordenadas iniciales (Sánchez Taboada, Tijuana)
+const LAT_INICIAL = 32.468;
+const LNG_INICIAL = -116.980;
 
 // ==========================================
-// 1. CARGA Y FILTRADO DE DATOS DESDE SUPABASE
+// 1. INICIALIZACIÓN (MAPA Y AUTENTICACIÓN)
 // ==========================================
 
-// Cargar todas las incidencias desde Supabase
+document.addEventListener('DOMContentLoaded', () => {
+  initMap();
+  initAuth();
+  cargarIncidencias();
+});
+
+// Inicializar Mapa Leaflet
+function initMap() {
+  const mapContainer = document.getElementById('map');
+  if (!mapContainer) return;
+
+  // Crear instancia del mapa centrada en la Sánchez Taboada
+  map = L.map('map').setView([LAT_INICIAL, LNG_INICIAL], 14);
+
+  // Cargar capa de OpenStreetMap
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '© OpenStreetMap'
+  }).addTo(map);
+
+  // Evento al hacer clic en el mapa para fijar pin de ubicación
+  map.on('click', (e) => {
+    const { lat, lng } = e.latlng;
+    colocarMarcador(lat, lng);
+  });
+}
+
+// Colocar o mover el marcador en el mapa
+function colocarMarcador(lat, lng) {
+  latSeleccionada = lat;
+  lngSeleccionada = lng;
+
+  if (marker) {
+    marker.setLatLng([lat, lng]);
+  } else {
+    marker = L.marker([lat, lng]).addTo(map);
+  }
+
+  const inputUbicacion = document.getElementById('inc-ubicacion');
+  if (inputUbicacion && !inputUbicacion.value) {
+    inputUbicacion.value = `Ubicación marcada en mapa (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+  }
+}
+
+// Obtener ubicación GPS actual del usuario
+function usarUbicacionActual() {
+  if (!navigator.geolocation) {
+    alert('La geolocalización no está soportada por tu navegador.');
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      map.setView([lat, lng], 16);
+      colocarMarcador(lat, lng);
+    },
+    (error) => {
+      alert('No se pudo obtener tu ubicación actual: ' + error.message);
+    }
+  );
+}
+
+// Escuchar cambios en la sesión de Supabase
+function initAuth() {
+  _supabase.auth.onAuthStateChange((event, session) => {
+    usuarioAutenticado = !!session;
+    actualizarUIAuth(session);
+    renderizarPagina();
+  });
+}
+
+// Actualizar botón del header según el estado de la sesión
+function actualizarUIAuth(session) {
+  const btnAuth = document.getElementById('btn-auth-header');
+  if (btnAuth) {
+    if (session) {
+      btnAuth.innerHTML = `<i class="bi bi-box-arrow-right"></i> Cerrar Sesión`;
+      btnAuth.onclick = cerrarSesion;
+      btnAuth.removeAttribute('data-bs-toggle');
+      btnAuth.removeAttribute('data-bs-target');
+    } else {
+      btnAuth.innerHTML = `<i class="bi bi-person-lock"></i> Acceso Admin`;
+      btnAuth.onclick = null;
+      btnAuth.setAttribute('data-bs-toggle', 'modal');
+      btnAuth.setAttribute('data-bs-target', '#modalLogin');
+    }
+  }
+}
+
+// Iniciar Sesión Admin
+async function iniciarSesion() {
+  const email = document.getElementById('login-email').value;
+  const password = document.getElementById('login-password').value;
+  const btn = document.getElementById('btn-login');
+
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Entrando...`;
+
+  const { data, error } = await _supabase.auth.signInWithPassword({ email, password });
+
+  btn.disabled = false;
+  btn.innerText = 'Iniciar Sesión';
+
+  if (error) {
+    alert('Error de acceso: ' + error.message);
+  } else {
+    const modalEl = document.getElementById('modalLogin');
+    const modal = bootstrap.Modal.getInstance(modalEl);
+    if (modal) modal.hide();
+  }
+}
+
+// Cerrar Sesión Admin
+async function cerrarSesion() {
+  await _supabase.auth.signOut();
+  cargarIncidencias();
+}
+
+// Previsualizar foto adjunta
+function previsualizarImagen(event) {
+  const file = event.target.files[0];
+  const preview = document.getElementById('img-preview');
+  const previewContainer = document.getElementById('preview-container');
+
+  if (file && preview && previewContainer) {
+    preview.src = URL.createObjectURL(file);
+    previewContainer.classList.remove('d-none');
+  }
+}
+
+// Cancelar/Quitar foto adjunta
+function cancelarFoto() {
+  const input = document.getElementById('inc-file');
+  const previewContainer = document.getElementById('preview-container');
+  if (input) input.value = '';
+  if (previewContainer) previewContainer.classList.add('d-none');
+}
+
+// ==========================================
+// 2. CARGA Y FILTRADO DE DATOS (SUPABASE)
+// ==========================================
+
+// Cargar todas las incidencias
 async function cargarIncidencias() {
   const container = document.getElementById('incidencias-container');
   if (!container) return;
@@ -32,7 +185,7 @@ async function cargarIncidencias() {
   renderizarPagina();
 }
 
-// Actualizar contadores del panel superior
+// Actualizar contadores superiores
 function actualizarContadores() {
   let pendientes = 0;
   let revision = 0;
@@ -54,12 +207,12 @@ function actualizarContadores() {
   if (elAtendidos) elAtendidos.innerText = atendidos;
 }
 
-// Renderizar tarjetas de reportes y controles de paginación
+// Renderizar lista de reportes
 function renderizarPagina() {
   const container = document.getElementById('incidencias-container');
   if (!container) return;
 
-  // Si NO es admin, solo se muestran los reportes publicados (Pendiente / Atendido)
+  // Si NO es admin, solo se muestran reportes aprobados/publicados
   const reportesVisibles = usuarioAutenticado 
     ? listaIncidencias 
     : listaIncidencias.filter(item => item.estado !== 'En revisión');
@@ -91,7 +244,6 @@ function renderizarPagina() {
       ? `https://www.google.com/maps?q=${item.lat},${item.lng}` 
       : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.ubicacion + ' Sanchez Taboada Tijuana')}`;
 
-    // Menú de opciones de administrador o solo badge público
     let htmlOpciones = `<span class="badge ${badgeClass} badge-estado shadow-sm">${item.estado || 'En revisión'}</span>`;
 
     if (usuarioAutenticado) {
@@ -159,15 +311,13 @@ function renderizarPagina() {
   if (btnNext) btnNext.disabled = (paginaActual === totalPaginas);
 }
 
-// Navegación de paginación
 function cambiarPagina(delta) {
   paginaActual += delta;
   renderizarPagina();
 }
 
-
 // ==========================================
-// 2. CREACIÓN DE NUEVO REPORTE (CIUDADANO)
+// 3. CREACIÓN DE REPORTE (CIUDADANO)
 // ==========================================
 
 async function crearIncidencia() {
@@ -189,7 +339,6 @@ async function crearIncidencia() {
 
   let imagenPublicaUrl = null;
 
-  // Subir imagen a Storage si fue seleccionada
   if (file) {
     const fileExt = file.name.split('.').pop();
     const fileName = `incidencia_${Date.now()}.${fileExt}`;
@@ -211,7 +360,7 @@ async function crearIncidencia() {
     imagenPublicaUrl = urlData.publicUrl;
   }
 
-  // Insertar en la base de datos con estado inicial 'En revisión'
+  // Insertar con estado 'En revisión'
   const { error: insertError } = await _supabase.from('incidencias').insert([{
     titulo: titulo,
     tipo: tipo,
@@ -232,19 +381,24 @@ async function crearIncidencia() {
     alert('¡Gracias por tu reporte! Tu publicación ha sido enviada con éxito y estará en revisión antes de ser publicada.');
     
     document.getElementById('form-incidencia').reset();
-    if (typeof cancelarFoto === 'function') cancelarFoto();
-    
-    // Recargar datos
+    cancelarFoto();
+
+    // Limpiar marcador del mapa
+    if (marker) {
+      map.removeLayer(marker);
+      marker = null;
+    }
+    latSeleccionada = null;
+    lngSeleccionada = null;
+
     cargarIncidencias();
   }
 }
 
-
 // ==========================================
-// 3. FUNCIONES DE ADMINISTRACIÓN (ADMIN)
+// 4. FUNCIONES DE ADMINISTRACIÓN (ADMIN)
 // ==========================================
 
-// Cambiar el estado de un reporte
 async function cambiarEstado(id, nuevoEstado) {
   const { error } = await _supabase
     .from('incidencias')
@@ -262,7 +416,6 @@ async function cambiarEstado(id, nuevoEstado) {
   }
 }
 
-// Cargar datos en el modal de edición
 function prepararEdicion(id) {
   const item = listaIncidencias.find(i => i.id == id);
   if (!item) return;
@@ -278,7 +431,6 @@ function prepararEdicion(id) {
   modal.show();
 }
 
-// Guardar los datos editados en Supabase
 async function guardarEdicion() {
   const id = document.getElementById('edit-id').value;
   const titulo = document.getElementById('edit-titulo').value.trim();
@@ -317,7 +469,6 @@ async function guardarEdicion() {
   }
 }
 
-// Eliminar reporte permanentemente
 async function eliminarIncidencia(id) {
   if (!confirm('¿Estás seguro de que deseas eliminar este reporte de forma permanente?')) return;
 
